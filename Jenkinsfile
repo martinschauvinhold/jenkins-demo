@@ -28,3 +28,32 @@ pipeline {
     failure { echo '❌ Pipeline falló' }
   }
 }
+pipeline {
+  agent any
+
+  stages {
+    stage('Build') {
+      steps {
+        sh 'echo Compilando proyecto...'
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      steps {
+        withSonarQubeEnv('sonar') {
+          sh 'echo "Ejecutando análisis en SonarQube..."'
+          sh 'sonar-scanner -Dsonar.projectKey=jenkins-demo -Dsonar.sources=.'
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo '✅ Pipeline completado con éxito'
+    }
+    failure {
+      echo '❌ Pipeline falló'
+    }
+  }
+}
