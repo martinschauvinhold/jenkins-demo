@@ -11,22 +11,35 @@ pipeline {
   }
 
   stages {
+
+    // -------------------------------
+    // 1. CHECKOUT
+    // -------------------------------
     stage('Checkout') {
       steps { checkout scm }
     }
 
+    // -------------------------------
+    // 2. BUILD
+    // -------------------------------
     stage('Build') {
       steps {
         sh 'echo "Compilando proyecto..."'
       }
     }
 
+    // -------------------------------
+    // 3. TESTS
+    // -------------------------------
     stage('Test') {
       steps {
         sh 'echo "Ejecutando tests..."'
       }
     }
 
+    // -------------------------------
+    // 4. SONARQUBE
+    // -------------------------------
     stage('SonarQube Analysis') {
       steps {
         withSonarQubeEnv('sonar') {
@@ -42,6 +55,9 @@ pipeline {
       }
     }
 
+    // -------------------------------
+    // 5. QUALITY GATE
+    // -------------------------------
     stage('Quality Gate') {
       steps {
         timeout(time: 10, unit: 'MINUTES') {
@@ -50,14 +66,13 @@ pipeline {
       }
     }
 
-    // ----------------------------------------------------
-    // 🚀 SAST — Semgrep (usando Git)
-    // ----------------------------------------------------
+    // -------------------------------
+    // 6. SAST — SEMGREP
+    // -------------------------------
     stage('SAST - Semgrep') {
       steps {
         sh '''
           echo "Ejecutando Semgrep (SAST)..."
-          # Agregamos el Semgrep de ubuntu al PATH para el usuario jenkins
           export PATH="$PATH:/home/ubuntu/.local/bin"
 
           mkdir -p reports
@@ -81,9 +96,9 @@ pipeline {
       }
     }
 
-    // ----------------------------------------------------
-    // 🧪 NUEVO STAGE — SCA con Snyk
-    // ----------------------------------------------------
+    // -------------------------------
+    // 7. SCA — SNYK
+    // -------------------------------
     stage('SCA - Snyk') {
       steps {
         withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
@@ -92,7 +107,6 @@ pipeline {
             mkdir -p reports
             export SNYK_TOKEN=${SNYK_TOKEN}
 
-            # Ejecutamos Snyk sobre el workspace actual
             snyk test --json > reports/snyk-report.json || true
           '''
         }
@@ -109,8 +123,10 @@ pipeline {
         }
       }
     }
-    // ----------------------------------------------------
 
+    // -------------------------------
+    // 8. PACKAGE
+    // -------------------------------
     stage('Package') {
       steps {
         sh 'mkdir -p build && echo "artefacto-demo" > build/artifact.txt'
@@ -124,3 +140,4 @@ pipeline {
     failure { echo '❌ Pipeline falló' }
   }
 }
+
