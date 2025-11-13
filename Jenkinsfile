@@ -99,7 +99,7 @@ pipeline {
     // -------------------------------
     // 7. SCA — SNYK
     // -------------------------------
-        stage('SCA - Snyk') {
+    stage('SCA - Snyk') {
       steps {
         withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
           sh '''
@@ -107,7 +107,6 @@ pipeline {
             mkdir -p reports
             export SNYK_TOKEN=${SNYK_TOKEN}
 
-            # Ejecutamos Snyk y guardamos el resultado en JSON
             snyk test --json > reports/snyk-report.json || true
           '''
         }
@@ -125,9 +124,42 @@ pipeline {
       }
     }
 
+    // -------------------------------
+    // 8. DAST — OWASP ZAP
+    // -------------------------------
+    stage('DAST - OWASP ZAP') {
+      steps {
+        sh '''
+          echo "Ejecutando OWASP ZAP (DAST) contra testphp.vulnweb.com..."
+
+          # Carpeta para el reporte de ZAP
+          mkdir -p reports/zap
+
+          # Escaneo full con la imagen oficial de ZAP
+          docker run --rm \
+            -v $(pwd)/reports/zap:/zap/wrk/ \
+            owasp/zap2docker-stable \
+              zap-full-scan.py \
+                -t http://testphp.vulnweb.com/ \
+                -r zap-report.html \
+              || true
+        '''
+      }
+      post {
+        always {
+          script {
+            if (fileExists('reports/zap/zap-report.html')) {
+              archiveArtifacts artifacts: 'reports/zap/zap-report.html', onlyIfSuccessful: false
+            } else {
+              echo '⚠ ZAP no generó reports/zap/zap-report.html (revisar stage DAST).'
+            }
+          }
+        }
+      }
+    }
 
     // -------------------------------
-    // 8. PACKAGE
+    // 9. PACKAGE
     // -------------------------------
     stage('Package') {
       steps {
@@ -142,4 +174,3 @@ pipeline {
     failure { echo '❌ Pipeline falló' }
   }
 }
-
