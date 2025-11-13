@@ -99,7 +99,7 @@ pipeline {
     // -------------------------------
     // 7. SCA — SNYK
     // -------------------------------
-    stage('SCA - Snyk') {
+        stage('SCA - Snyk') {
       steps {
         withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
           sh '''
@@ -107,6 +107,7 @@ pipeline {
             mkdir -p reports
             export SNYK_TOKEN=${SNYK_TOKEN}
 
+            # Ejecutamos Snyk y guardamos el resultado en JSON
             snyk test --json > reports/snyk-report.json || true
           '''
         }
@@ -123,6 +124,7 @@ pipeline {
         }
       }
     }
+
 
     // -------------------------------
     // 8. PACKAGE
