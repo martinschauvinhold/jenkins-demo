@@ -1,0 +1,14 @@
+{
+  "name": "jenkins-demo-app",
+  "version": "1.0.0",
+  "description": "App demo para pipeline DevSecOps (Sonar, Semgrep, Snyk, ZAP)",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "echo \"No hay tests aún\" && exit 0"
+  },
+  "dependencies": {
+    "express": "4.17.1",
+    "lodash": "4.17.15"
+  }
+}
