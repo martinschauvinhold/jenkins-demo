@@ -51,7 +51,7 @@ pipeline {
     }
 
     // ----------------------------------------------------
-    // 🚀 NUEVO STAGE — SAST con Semgrep (usando Git)
+    // 🚀 SAST — Semgrep (usando Git)
     // ----------------------------------------------------
     stage('SAST - Semgrep') {
       steps {
@@ -75,6 +75,35 @@ pipeline {
               archiveArtifacts artifacts: 'reports/semgrep-report.json', onlyIfSuccessful: false
             } else {
               echo '⚠ Semgrep no generó reports/semgrep-report.json (revisar stage SAST).'
+            }
+          }
+        }
+      }
+    }
+
+    // ----------------------------------------------------
+    // 🧪 NUEVO STAGE — SCA con Snyk
+    // ----------------------------------------------------
+    stage('SCA - Snyk') {
+      steps {
+        withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
+          sh '''
+            echo "Ejecutando Snyk (SCA)..."
+            mkdir -p reports
+            export SNYK_TOKEN=${SNYK_TOKEN}
+
+            # Ejecutamos Snyk sobre el workspace actual
+            snyk test --json > reports/snyk-report.json || true
+          '''
+        }
+      }
+      post {
+        always {
+          script {
+            if (fileExists('reports/snyk-report.json')) {
+              archiveArtifacts artifacts: 'reports/snyk-report.json', onlyIfSuccessful: false
+            } else {
+              echo '⚠ Snyk no generó reports/snyk-report.json (revisar stage SCA).'
             }
           }
         }
