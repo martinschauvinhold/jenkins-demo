@@ -53,23 +53,34 @@ pipeline {
     // ----------------------------------------------------
     // 🚀 NUEVO STAGE — SAST con Semgrep (usando Git)
     // ----------------------------------------------------
-    stage('SAST - Semgrep') {
-      steps {
-        sh '''
-          echo "Ejecutando Semgrep (SAST)..."
-          mkdir -p reports
-          semgrep --config=auto \
-                  --json \
-                  --output=reports/semgrep-report.json \
-                  || true
-        '''
-      }
-      post {
-        always {
+  stage('SAST - Semgrep') {
+  steps {
+    sh '''
+      echo "Ejecutando Semgrep (SAST)..."
+      # Agregamos el Semgrep de ubuntu al PATH para el usuario jenkins
+      export PATH="$PATH:/home/ubuntu/.local/bin"
+
+      mkdir -p reports
+
+      semgrep --config=auto \
+              --json \
+              --output=reports/semgrep-report.json \
+              || true
+    '''
+  }
+  post {
+    always {
+      script {
+        if (fileExists('reports/semgrep-report.json')) {
           archiveArtifacts artifacts: 'reports/semgrep-report.json', onlyIfSuccessful: false
+        } else {
+          echo '⚠ Semgrep no generó reports/semgrep-report.json (revisar stage SAST).'
         }
       }
     }
+  }
+}
+
     // ----------------------------------------------------
 
     stage('Package') {
