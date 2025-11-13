@@ -1,46 +1,36 @@
 /*
-  Jenkinsfile - Demo Pipeline DevSecOps
-  -------------------------------------
-  Este pipeline muestra un flujo completo de CI/CD con foco en DevSecOps:
+  Jenkinsfile - Demo Pipeline DevSecOps (Presentación)
+  ----------------------------------------------------
+  Flujo completo:
+    1) Checkout del código
+    2) Build (npm install)
+    3) Tests (npm test)
+    4) Análisis estático con SonarQube
+    5) Quality Gate (sin cortar el pipeline)
+    6) SAST con Semgrep
+    7) SCA con Snyk
+    8) DAST con OWASP ZAP
+    9) Package (artefacto final)
 
-  1) Checkout del código desde Git
-  2) Build (compilación)
-  3) Tests
-  4) Análisis estático con SonarQube (bugs, code smells, coverage, etc.)
-  5) Quality Gate de SonarQube (frena o no el pipeline)
-  6) SAST con Semgrep (vulnerabilidades en el código)
-  7) SCA con Snyk (vulnerabilidades en dependencias)
-  8) DAST con OWASP ZAP (escaneo dinámico de una app web de prueba)
-  9) Package (artefacto final de demo)
-
-  Requisitos:
-   - Jenkins con plugin de Pipeline, SonarQube y credenciales configuradas.
-   - Herramientas instaladas en el agente:
-       * Node.js y npm
-       * SonarScanner (configurado en "Global Tool Configuration" como 'SonarScanner')
-       * Semgrep instalado (ej: pipx/pip en /home/ubuntu/.local/bin)
-       * Snyk CLI instalado
-       * Docker instalado y funcionando (para el stage de ZAP)
-   - Credenciales:
-       * Servidor SonarQube configurado como 'sonar'
-       * Credential de tipo "Secret text" con ID 'snyk-token'
+  REQUISITOS EN EL AGENTE:
+    - Node.js + npm
+    - SonarScanner configurado como tool 'SonarScanner'
+    - Servidor SonarQube configurado como 'sonar'
+    - Semgrep instalado (ej: /home/ubuntu/.local/bin)
+    - Snyk CLI instalado + credencial 'snyk-token' (Secret text)
+    - Docker instalado (para OWASP ZAP)
 */
 
 pipeline {
   agent any
 
   options {
-    // Muestra timestamps en el log de Jenkins
     timestamps()
-    // Evita que se ejecuten builds en paralelo del mismo job
     disableConcurrentBuilds()
   }
 
   environment {
-    // Herramienta SonarScanner configurada en Jenkins (Manage Jenkins > Global Tool Configuration)
     SCANNER_HOME = tool 'SonarScanner'
-
-    // Agrego SonarScanner al PATH para poder usar 'sonar-scanner' directamente
     PATH = "${SCANNER_HOME}/bin:${PATH}"
   }
 
@@ -51,8 +41,9 @@ pipeline {
     // -------------------------------
     stage('Checkout') {
       steps {
-        // Toma el Jenkinsfile y el código del mismo repo configurado en el job
+        echo '📥 [CHECKOUT] Obteniendo código desde GitHub...'
         checkout scm
+        sh 'ls -la'
       }
     }
 
@@ -61,8 +52,9 @@ pipeline {
     // -------------------------------
     stage('Build') {
       steps {
+        echo '🏗️ [BUILD] Instalando dependencias con npm...'
         sh '''
-          echo "Instalando dependencias (npm install)..."
+          echo ">>> npm install"
           npm install
         '''
       }
@@ -73,9 +65,9 @@ pipeline {
     // -------------------------------
     stage('Test') {
       steps {
+        echo '🧪 [TEST] Ejecutando tests de la aplicación...'
         sh '''
-          echo "Ejecutando tests (npm test)..."
-          # En esta demo npm test simplemente imprime un mensaje y sale 0
+          echo ">>> npm test"
           npm test || true
         '''
       }
@@ -86,10 +78,9 @@ pipeline {
     // -------------------------------
     stage('SonarQube Analysis') {
       steps {
-        // 'sonar' es el nombre del servidor SonarQube configurado en Jenkins (Manage Jenkins > Configure System)
+        echo '🔍 [SONARQUBE] Ejecutando análisis estático de código...'
         withSonarQubeEnv('sonar') {
           sh '''
-            echo "Ejecutando análisis en SonarQube..."
             sonar-scanner \
               -Dsonar.projectKey=jenkins-demo \
               -Dsonar.projectName=jenkins-demo \
@@ -101,14 +92,20 @@ pipeline {
     }
 
     // -------------------------------
-    // 5. QUALITY GATE
+    // 5. QUALITY GATE (NO CORTA)
     // -------------------------------
     stage('Quality Gate') {
       steps {
-        // Espera a que SonarQube procese el análisis
-        // Si el Quality Gate se marca como FAILED, aborta el pipeline
+        echo '🚦 [QUALITY GATE] Consultando resultado del análisis en SonarQube...'
         timeout(time: 10, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true
+          script {
+            def qg = waitForQualityGate()
+            echo "🚦 Resultado del Quality Gate: ${qg.status}"
+
+            // IMPORTANTE PARA LA DEMO:
+            // NO usamos abortPipeline:true, así aunque esté en ERROR
+            // el pipeline continúa y podemos mostrar Semgrep, Snyk y ZAP.
+          }
         }
       }
     }
@@ -118,30 +115,28 @@ pipeline {
     // -------------------------------
     stage('SAST - Semgrep') {
       steps {
+        echo '🛡️ [SAST] Ejecutando Semgrep sobre el código fuente...'
         sh '''
-          echo "Ejecutando Semgrep (SAST)..."
-
-          # Aseguramos que Semgrep (instalado con pip/pipx) esté en el PATH
+          # Aseguramos Semgrep en el PATH (ajustar si está en otra ruta)
           export PATH="$PATH:/home/ubuntu/.local/bin"
 
           mkdir -p reports
 
-          # --config=auto: usa reglas por defecto según el stack detectado
-          # --json: salida en JSON para poder archivarla
+          echo ">>> semgrep --config=auto"
           semgrep --config=auto \
                   --json \
                   --output=reports/semgrep-report.json \
-                  || true   # '|| true' para que, en modo demo, el pipeline no falle si hay findings
+                  || true   # Para la demo, no rompemos el pipeline si hay findings
         '''
       }
       post {
         always {
           script {
             if (fileExists('reports/semgrep-report.json')) {
-              // Publicamos el reporte como artefacto del build
+              echo '📄 [SAST] Reporte de Semgrep generado en reports/semgrep-report.json'
               archiveArtifacts artifacts: 'reports/semgrep-report.json', onlyIfSuccessful: false
             } else {
-              echo '⚠ Semgrep no generó reports/semgrep-report.json (revisar stage SAST).'
+              echo '⚠ [SAST] Semgrep no generó reports/semgrep-report.json'
             }
           }
         }
@@ -153,15 +148,13 @@ pipeline {
     // -------------------------------
     stage('SCA - Snyk') {
       steps {
-        // Usa credencial 'snyk-token' almacenada en Jenkins (Secret text)
+        echo '📦 [SCA] Ejecutando Snyk sobre dependencias (package.json)...'
         withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
           sh '''
-            echo "Ejecutando Snyk (SCA - dependencias)..."
-
             mkdir -p reports
             export SNYK_TOKEN=${SNYK_TOKEN}
 
-            # Analiza vulnerabilidades en dependencias (package.json, etc.)
+            echo ">>> snyk test --json"
             snyk test --json > reports/snyk-report.json || true
           '''
         }
@@ -170,9 +163,10 @@ pipeline {
         always {
           script {
             if (fileExists('reports/snyk-report.json')) {
+              echo '📄 [SCA] Reporte de Snyk generado en reports/snyk-report.json'
               archiveArtifacts artifacts: 'reports/snyk-report.json', onlyIfSuccessful: false
             } else {
-              echo '⚠ Snyk no generó reports/snyk-report.json (revisar stage SCA).'
+              echo '⚠ [SCA] Snyk no generó reports/snyk-report.json'
             }
           }
         }
@@ -184,30 +178,28 @@ pipeline {
     // -------------------------------
     stage('DAST - OWASP ZAP') {
       steps {
+        echo '🌐 [DAST] Ejecutando OWASP ZAP contra testphp.vulnweb.com...'
         sh '''
-          echo "Ejecutando OWASP ZAP (DAST) contra testphp.vulnweb.com..."
-
-          # Carpeta para el reporte de ZAP
           mkdir -p reports/zap
 
-          # Escaneo full con la imagen oficial de ZAP
-          # IMPORTANTE: requiere Docker instalado en el agente Jenkins.
+          echo ">>> docker run owasp/zap2docker-stable zap-full-scan.py ..."
           docker run --rm \
             -v $(pwd)/reports/zap:/zap/wrk/ \
             owasp/zap2docker-stable \
               zap-full-scan.py \
                 -t http://testphp.vulnweb.com/ \
                 -r zap-report.html \
-              || true   # en modo demo dejamos que el pipeline siga aunque detecte alertas
+              || true
         '''
       }
       post {
         always {
           script {
             if (fileExists('reports/zap/zap-report.html')) {
+              echo '📄 [DAST] Reporte HTML de ZAP generado en reports/zap/zap-report.html'
               archiveArtifacts artifacts: 'reports/zap/zap-report.html', onlyIfSuccessful: false
             } else {
-              echo '⚠ ZAP no generó reports/zap/zap-report.html (revisar stage DAST).'
+              echo '⚠ [DAST] ZAP no generó reports/zap/zap-report.html'
             }
           }
         }
@@ -219,9 +211,8 @@ pipeline {
     // -------------------------------
     stage('Package') {
       steps {
-        // Stage simple para simular la generación de un artefacto final
+        echo '📦 [PACKAGE] Generando artefacto final de demo...'
         sh '''
-          echo "Generando artefacto de demo..."
           mkdir -p build
           echo "artefacto-demo" > build/artifact.txt
         '''
@@ -232,10 +223,10 @@ pipeline {
 
   post {
     success {
-      echo '✅ Pipeline completado con éxito'
+      echo '✅ [FIN] Pipeline completado con éxito (todas las herramientas ejecutadas).'
     }
     failure {
-      echo '❌ Pipeline falló'
+      echo '❌ [FIN] Pipeline finalizó con errores.'
     }
   }
 }
