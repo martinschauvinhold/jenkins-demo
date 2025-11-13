@@ -5,10 +5,8 @@ pipeline {
     disableConcurrentBuilds()
   }
 
-  // Usamos el Tool "SonarScanner" sin declarar un bloque tools{}
-  // (si NO lo tenés configurado, cambiá esto por llamar directamente a `sonar-scanner` en PATH)
   environment {
-    SCANNER_HOME = tool 'SonarScanner'             // nombre EXACTO del Tool en Manage Jenkins → Tools
+    SCANNER_HOME = tool 'SonarScanner'
     PATH = "${SCANNER_HOME}/bin:${env.PATH}"
   }
 
@@ -31,7 +29,7 @@ pipeline {
 
     stage('SonarQube Analysis') {
       steps {
-        withSonarQubeEnv('sonar') {                 // nombre EXACTO del server en Manage Jenkins → System
+        withSonarQubeEnv('sonar') {
           sh '''
             echo "Ejecutando análisis en SonarQube..."
             sonar-scanner \
@@ -47,10 +45,32 @@ pipeline {
     stage('Quality Gate') {
       steps {
         timeout(time: 10, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true    // ← requerido por tu plugin
+          waitForQualityGate abortPipeline: true
         }
       }
     }
+
+    // ----------------------------------------------------
+    // 🚀 NUEVO STAGE — SAST con Semgrep (usando Git)
+    // ----------------------------------------------------
+    stage('SAST - Semgrep') {
+      steps {
+        sh '''
+          echo "Ejecutando Semgrep (SAST)..."
+          mkdir -p reports
+          semgrep --config=auto \
+                  --json \
+                  --output=reports/semgrep-report.json \
+                  || true
+        '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'reports/semgrep-report.json', onlyIfSuccessful: false
+        }
+      }
+    }
+    // ----------------------------------------------------
 
     stage('Package') {
       steps {
