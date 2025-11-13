@@ -16,6 +16,7 @@
   Requisitos:
    - Jenkins con plugin de Pipeline, SonarQube y credenciales configuradas.
    - Herramientas instaladas en el agente:
+       * Node.js y npm
        * SonarScanner (configurado en "Global Tool Configuration" como 'SonarScanner')
        * Semgrep instalado (ej: pipx/pip en /home/ubuntu/.local/bin)
        * Snyk CLI instalado
@@ -60,10 +61,10 @@ pipeline {
     // -------------------------------
     stage('Build') {
       steps {
-        // Acá irían los comandos reales de build (npm install / mvn package / etc.)
-        // Ejemplo para Node:
-        // sh 'npm install'
-        sh 'echo "Compilando proyecto (demo de build)..."'
+        sh '''
+          echo "Instalando dependencias (npm install)..."
+          npm install
+        '''
       }
     }
 
@@ -72,10 +73,11 @@ pipeline {
     // -------------------------------
     stage('Test') {
       steps {
-        // Acá irían los tests reales (npm test / mvn test / etc.)
-        // Ejemplo para Node:
-        // sh 'npm test'
-        sh 'echo "Ejecutando tests (demo de tests)..."'
+        sh '''
+          echo "Ejecutando tests (npm test)..."
+          # En esta demo npm test simplemente imprime un mensaje y sale 0
+          npm test || true
+        '''
       }
     }
 
@@ -159,7 +161,7 @@ pipeline {
             mkdir -p reports
             export SNYK_TOKEN=${SNYK_TOKEN}
 
-            # Analiza vulnerabilidades en dependencias (package.json, pom.xml, etc.)
+            # Analiza vulnerabilidades en dependencias (package.json, etc.)
             snyk test --json > reports/snyk-report.json || true
           '''
         }
